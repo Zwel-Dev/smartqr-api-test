@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
-  { href: '/',     label: 'Single VCard' },
-  { href: '/bulk', label: 'Bulk Create' },
+  { href: '/',              label: 'Single VCard' },
+  { href: '/bulk',          label: 'Bulk VCard' },
+  { href: '/website',       label: 'Single Website' },
+  { href: '/website-bulk',  label: 'Bulk Website' },
 ];
 
 export function TopNav() {

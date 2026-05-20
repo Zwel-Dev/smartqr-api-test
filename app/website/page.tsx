@@ -6,7 +6,7 @@ import {
   type RequestLog, type ResponseLog,
 } from '@/app/components/io-panels';
 
-interface VCardResult {
+interface WebsiteResult {
   status?: string;
   qrCodeID?: string;
   externalReferenceID?: string;
@@ -22,47 +22,25 @@ interface VCardResult {
 }
 
 const DEFAULTS = {
-  name:                'John Doe – Sales',
-  externalReferenceID: 'EMP-1234',
-  fullName:            'John Doe',
-  phone:               '+95-9-123-456-789',
-  altPhone:            '+95-1-555-1001',
-  email:               'john.doe@example.com',
-  website:             'https://example.com',
-  companyName:         'Example Co.',
-  companyTitle:        'Senior Sales Lead',
-  summaryText:         'Reach me anytime.',
-  street:              '123 Main Rd',
-  postalCode:          '11181',
-  city:                'Yangon',
-  state:               'Yangon Region',
-  country:             'Myanmar',
+  name:                'Spring Campaign Landing',
+  description:         'Q2 2026 lead-gen page.',
+  externalReferenceID: 'CAMPAIGN-2026-Q2',
+  targetUrl:           'https://example.com/landing/spring-2026',
+  displayTitle:        'Spring Campaign 2026',
+  subText:             'Redirecting you to our new landing page…',
   returnImage:         false,
 };
 
-export default function Home() {
+export default function WebsitePage() {
   // Request metadata
   const [name, setName]                       = useState(DEFAULTS.name);
+  const [description, setDescription]         = useState(DEFAULTS.description);
   const [externalReferenceID, setExternalRef] = useState(DEFAULTS.externalReferenceID);
 
-  // VCard — contact
-  const [fullName, setFullName] = useState(DEFAULTS.fullName);
-  const [phone,    setPhone]    = useState(DEFAULTS.phone);
-  const [altPhone, setAltPhone] = useState(DEFAULTS.altPhone);
-  const [email,    setEmail]    = useState(DEFAULTS.email);
-  const [website,  setWebsite]  = useState(DEFAULTS.website);
-
-  // VCard — company
-  const [companyName,  setCompanyName]  = useState(DEFAULTS.companyName);
-  const [companyTitle, setCompanyTitle] = useState(DEFAULTS.companyTitle);
-  const [summaryText,  setSummaryText]  = useState(DEFAULTS.summaryText);
-
-  // VCard — address
-  const [street,     setStreet]     = useState(DEFAULTS.street);
-  const [postalCode, setPostalCode] = useState(DEFAULTS.postalCode);
-  const [city,       setCity]       = useState(DEFAULTS.city);
-  const [stateVal,   setStateVal]   = useState(DEFAULTS.state);
-  const [country,    setCountry]    = useState(DEFAULTS.country);
+  // Website payload
+  const [targetUrl,    setTargetUrl]    = useState(DEFAULTS.targetUrl);
+  const [displayTitle, setDisplayTitle] = useState(DEFAULTS.displayTitle);
+  const [subText,      setSubText]      = useState(DEFAULTS.subText);
 
   // Options
   const [returnImage, setReturnImage] = useState(DEFAULTS.returnImage);
@@ -72,26 +50,6 @@ export default function Home() {
   const [request, setRequest]   = useState<RequestLog | null>(null);
   const [response, setResponse] = useState<ResponseLog | null>(null);
 
-  /** Build the address object only if at least one field is filled — keeps the payload tidy. */
-  function buildAddress() {
-    const trimmed = {
-      street:     street.trim(),
-      postalCode: postalCode.trim(),
-      city:       city.trim(),
-      state:      stateVal.trim(),
-      country:    country.trim(),
-    };
-    const anySet = Object.values(trimmed).some(v => v.length > 0);
-    if (!anySet) return undefined;
-    return {
-      street:     trimmed.street     || undefined,
-      postalCode: trimmed.postalCode || undefined,
-      city:       trimmed.city       || undefined,
-      state:      trimmed.state      || undefined,
-      country:    trimmed.country    || undefined,
-    };
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -99,22 +57,17 @@ export default function Home() {
 
     const payload = {
       name:                name.trim()                || undefined,
+      description:         description.trim()         || undefined,
       externalReferenceID: externalReferenceID.trim() || undefined,
-      vcard: {
-        fullName:     fullName.trim(),
-        phone:        phone.trim()        || undefined,
-        altPhone:     altPhone.trim()     || undefined,
-        email:        email.trim()        || undefined,
-        website:      website.trim()      || undefined,
-        companyName:  companyName.trim()  || undefined,
-        companyTitle: companyTitle.trim() || undefined,
-        summaryText:  summaryText.trim()  || undefined,
-        address:      buildAddress(),
+      website: {
+        targetUrl:    targetUrl.trim(),
+        displayTitle: displayTitle.trim() || undefined,
+        subText:      subText.trim()      || undefined,
       },
       returnImage,
     };
 
-    const url = '/api/qr/vcard';
+    const url = '/api/qr/website';
     setRequest({
       method: 'POST',
       url,
@@ -143,7 +96,7 @@ export default function Home() {
         status:     0,
         statusText: 'Network Error',
         ok:         false,
-        body:       { status: 'error', code: 'NETWORK_ERROR', message } satisfies VCardResult,
+        body:       { status: 'error', code: 'NETWORK_ERROR', message } satisfies WebsiteResult,
         durationMs: Math.round(performance.now() - start),
       });
     } finally {
@@ -153,20 +106,11 @@ export default function Home() {
 
   function reset() {
     setName(DEFAULTS.name);
+    setDescription(DEFAULTS.description);
     setExternalRef(DEFAULTS.externalReferenceID);
-    setFullName(DEFAULTS.fullName);
-    setPhone(DEFAULTS.phone);
-    setAltPhone(DEFAULTS.altPhone);
-    setEmail(DEFAULTS.email);
-    setWebsite(DEFAULTS.website);
-    setCompanyName(DEFAULTS.companyName);
-    setCompanyTitle(DEFAULTS.companyTitle);
-    setSummaryText(DEFAULTS.summaryText);
-    setStreet(DEFAULTS.street);
-    setPostalCode(DEFAULTS.postalCode);
-    setCity(DEFAULTS.city);
-    setStateVal(DEFAULTS.state);
-    setCountry(DEFAULTS.country);
+    setTargetUrl(DEFAULTS.targetUrl);
+    setDisplayTitle(DEFAULTS.displayTitle);
+    setSubText(DEFAULTS.subText);
     setReturnImage(DEFAULTS.returnImage);
     setRequest(null);
     setResponse(null);
@@ -175,10 +119,10 @@ export default function Home() {
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Smart_QR Integration Demo</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Website QR — Single create</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Frontend calls <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">/api/qr/vcard</code>;
-          a Next.js server function forwards to Smart_QR with the API key kept on the server.
+          POST <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">/api/v1/public/qr/website</code> via
+          a Next.js server function that keeps the API key on the server.
         </p>
       </header>
 
@@ -188,83 +132,38 @@ export default function Home() {
               className="bg-white border border-gray-200 rounded-lg shadow-sm divide-y divide-gray-100">
 
           <Section title="Request metadata"
-                   subtitle="Optional dashboard label + your own ID mapping">
+                   subtitle="Dashboard label, free-text notes, your own ID mapping">
             <Grid>
               <Field label="Name" hint="Shown in your Smart_QR dashboard">
                 <input value={name} onChange={e => setName(e.target.value)}
-                       className={inputClass} placeholder="John Doe – Sales" />
+                       className={inputClass} placeholder="Spring Campaign Landing" maxLength={200} />
               </Field>
               <Field label="External Reference ID" hint="">
                 <input value={externalReferenceID} onChange={e => setExternalRef(e.target.value)}
-                       className={inputClass} placeholder="EMP-1234" maxLength={100} />
+                       className={inputClass} placeholder="CAMPAIGN-2026-Q2" maxLength={100} />
+              </Field>
+              <Field label="Description" full>
+                <input value={description} onChange={e => setDescription(e.target.value)}
+                       className={inputClass} placeholder="Q2 2026 lead-gen page." maxLength={500} />
               </Field>
             </Grid>
           </Section>
 
-          <Section title="Contact"
-                   subtitle="Full name required; at least one of phone or email">
+          <Section title="Website"
+                   subtitle="Target URL required (http/https, no userinfo, no private hosts)">
             <Grid>
-              <Field label="Full name *" full>
-                <input value={fullName} onChange={e => setFullName(e.target.value)}
-                       className={inputClass} required placeholder="John Doe" />
+              <Field label="Target URL *" hint="≤ 2048 chars, http or https" full>
+                <input value={targetUrl} onChange={e => setTargetUrl(e.target.value)}
+                       className={inputClass} required type="url"
+                       placeholder="https://example.com/landing/spring-2026" maxLength={2048} />
               </Field>
-              <Field label="Phone">
-                <input value={phone} onChange={e => setPhone(e.target.value)}
-                       className={inputClass} placeholder="+95-9-123-456-789" />
+              <Field label="Display title" hint="≤ 100 chars" full>
+                <input value={displayTitle} onChange={e => setDisplayTitle(e.target.value)}
+                       className={inputClass} placeholder="Spring Campaign 2026" maxLength={100} />
               </Field>
-              <Field label="Alt phone">
-                <input value={altPhone} onChange={e => setAltPhone(e.target.value)}
-                       className={inputClass} placeholder="+95-1-555-1001" />
-              </Field>
-              <Field label="Email">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                       className={inputClass} placeholder="john@example.com" />
-              </Field>
-              <Field label="Website">
-                <input value={website} onChange={e => setWebsite(e.target.value)}
-                       className={inputClass} placeholder="https://example.com" />
-              </Field>
-            </Grid>
-          </Section>
-
-          <Section title="Company" subtitle="All optional">
-            <Grid>
-              <Field label="Company name">
-                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                       className={inputClass} placeholder="Example Co." />
-              </Field>
-              <Field label="Title">
-                <input value={companyTitle} onChange={e => setCompanyTitle(e.target.value)}
-                       className={inputClass} placeholder="Senior Sales Lead" />
-              </Field>
-              <Field label="Summary text" full>
-                <input value={summaryText} onChange={e => setSummaryText(e.target.value)}
-                       className={inputClass} placeholder="Reach me anytime." />
-              </Field>
-            </Grid>
-          </Section>
-
-          <Section title="Address" subtitle="All optional — empty fields are omitted">
-            <Grid>
-              <Field label="Street" full>
-                <input value={street} onChange={e => setStreet(e.target.value)}
-                       className={inputClass} placeholder="123 Main Rd" />
-              </Field>
-              <Field label="Postal code">
-                <input value={postalCode} onChange={e => setPostalCode(e.target.value)}
-                       className={inputClass} placeholder="11181" />
-              </Field>
-              <Field label="City">
-                <input value={city} onChange={e => setCity(e.target.value)}
-                       className={inputClass} placeholder="Yangon" />
-              </Field>
-              <Field label="State / Region">
-                <input value={stateVal} onChange={e => setStateVal(e.target.value)}
-                       className={inputClass} placeholder="Yangon Region" />
-              </Field>
-              <Field label="Country">
-                <input value={country} onChange={e => setCountry(e.target.value)}
-                       className={inputClass} placeholder="Myanmar" />
+              <Field label="Sub-text" hint="≤ 300 chars" full>
+                <input value={subText} onChange={e => setSubText(e.target.value)}
+                       className={inputClass} placeholder="Redirecting you to the landing page…" maxLength={300} />
               </Field>
             </Grid>
           </Section>
@@ -284,11 +183,11 @@ export default function Home() {
                                bg-white hover:bg-gray-50 disabled:opacity-50 text-sm font-medium">
               Reset
             </button>
-            <button type="submit" disabled={loading || !fullName.trim()}
+            <button type="submit" disabled={loading || !targetUrl.trim()}
                     className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-700
                                disabled:opacity-50 disabled:cursor-not-allowed
                                text-white text-sm font-medium">
-              {loading ? 'Creating…' : 'Create VCard'}
+              {loading ? 'Creating…' : 'Create Website QR'}
             </button>
           </div>
         </form>
@@ -304,7 +203,7 @@ export default function Home() {
 }
 
 // ────────────────────────────────────────────────────────
-// Layout helpers
+// Layout helpers (mirror VCard page so the two feel like siblings)
 // ────────────────────────────────────────────────────────
 
 const inputClass =
@@ -342,10 +241,10 @@ function Field({ label, hint, full, children }:
   );
 }
 
-/** Compact, human-readable highlights from a typical Smart_QR response. */
+/** Compact, human-readable highlights from a typical Smart_QR website response. */
 function renderHighlights(body: unknown): ReactNode {
   if (!body || typeof body !== 'object') return null;
-  const r = body as VCardResult;
+  const r = body as WebsiteResult;
 
   const rows: Array<[string, ReactNode]> = [];
   if (r.qrCodeID)               rows.push(['QR Code ID',  <code key="qid" className="bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">{r.qrCodeID}</code>]);
@@ -358,7 +257,6 @@ function renderHighlights(body: unknown): ReactNode {
   if (r.field)                  rows.push(['Field',       <code key="fd" className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded text-[11px]">{r.field}</code>]);
 
   const qrSrc = r.qrImageBase64 || r.qrImageUrl;
-
   if (rows.length === 0 && !qrSrc) return null;
 
   return (
