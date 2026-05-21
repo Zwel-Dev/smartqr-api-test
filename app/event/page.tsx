@@ -474,7 +474,7 @@ export default function EventPage() {
               </table>
             </div>
             <p className="text-[11px] text-gray-500 mt-3">
-              Custom fields (select dropdowns, free-text, etc.) aren't editable from this form — use the Bulk
+              Custom fields (select dropdowns, free-text, etc.) aren&apos;t editable from this form — use the Bulk
               page or the raw JSON tester if you need them.
             </p>
           </Section>
