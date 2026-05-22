@@ -6,7 +6,16 @@ import {
   type RequestLog, type ResponseLog,
 } from '@/app/components/io-panels';
 
-interface VCardResult {
+// ====================================================================
+// Customer Support Hub — Single create (with inline image upload)
+//
+// Each image slot offers either a URL field OR a file picker. On submit
+// the page runs a two-phase chain: (1) create the QR, (2) upload any
+// picked files into their corresponding slot. The response panel shows
+// step-by-step progress.
+// ====================================================================
+
+interface ServiceFeedbackResult {
   status?: string;
   qrCodeID?: string;
   externalReferenceID?: string;
@@ -19,73 +28,59 @@ interface VCardResult {
   code?: string;
   message?: string;
   field?: string;
-  // Profile-image upload outcome — spliced in client-side after the
-  // Phase-2 upload completes; not returned by the upstream Create.
+  // post-create upload outcome (spliced in client-side; not returned by the
+  // upstream Create endpoint).
   uploadedImage?: { imageUrl?: string; error?: string };
 }
 
-// Per-slot UI state for the profile-image control. URL mode = paste a
-// pre-hosted public URL; file mode = upload via POST /qr/{id}/upload-image
-// after the QR is created.
 interface ImageSlotState {
   mode: 'url' | 'file';
   url: string;
   file: File | null;
-  previewUrl: string | null;
+  previewUrl: string | null;   // object-URL for inline preview
 }
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 
+const DEFAULTS = {
+  name:                'Hotel — Front desk',
+  description:         'Welcome-desk experience survey, lobby tower A',
+  externalReferenceID: 'HOTEL-FRONTDESK-A',
+
+  serviceTitle:       'How was your check-in?',
+  serviceDescription: 'Help us improve the welcome experience.',
+  thankYouMessage:    'Thank you! A manager will read every response.',
+  brandColor:         '#1d62c4',
+
+  enableImageUpload:    true,
+  requireContactInfo:   false,
+
+  returnImage: false,
+};
+
 function emptySlot(): ImageSlotState {
   return { mode: 'url', url: '', file: null, previewUrl: null };
 }
 
-const DEFAULTS = {
-  name:                'John Doe – Sales',
-  externalReferenceID: 'EMP-1234',
-  fullName:            'John Doe',
-  phone:               '+95-9-123-456-789',
-  altPhone:            '+95-1-555-1001',
-  email:               'john.doe@example.com',
-  website:             'https://example.com',
-  companyName:         'Example Co.',
-  companyTitle:        'Senior Sales Lead',
-  summaryText:         'Reach me anytime.',
-  street:              '123 Main Rd',
-  postalCode:          '11181',
-  city:                'Yangon',
-  state:               'Yangon Region',
-  country:             'Myanmar',
-  returnImage:         false,
-};
-
-export default function Home() {
-  // Request metadata
+export default function ServiceFeedbackPage() {
+  // Envelope
   const [name, setName]                       = useState(DEFAULTS.name);
+  const [description, setDescription]         = useState(DEFAULTS.description);
   const [externalReferenceID, setExternalRef] = useState(DEFAULTS.externalReferenceID);
 
-  // VCard — contact
-  const [fullName, setFullName] = useState(DEFAULTS.fullName);
-  const [phone,    setPhone]    = useState(DEFAULTS.phone);
-  const [altPhone, setAltPhone] = useState(DEFAULTS.altPhone);
-  const [email,    setEmail]    = useState(DEFAULTS.email);
-  const [website,  setWebsite]  = useState(DEFAULTS.website);
+  // Payload — copy
+  const [serviceTitle, setServiceTitle]             = useState(DEFAULTS.serviceTitle);
+  const [serviceDescription, setServiceDescription] = useState(DEFAULTS.serviceDescription);
+  const [thankYouMessage, setThankYouMessage]       = useState(DEFAULTS.thankYouMessage);
+  const [brandColor, setBrandColor]                 = useState(DEFAULTS.brandColor);
 
-  // VCard — company
-  const [companyName,  setCompanyName]  = useState(DEFAULTS.companyName);
-  const [companyTitle, setCompanyTitle] = useState(DEFAULTS.companyTitle);
-  const [summaryText,  setSummaryText]  = useState(DEFAULTS.summaryText);
-
-  // VCard — address
-  const [street,     setStreet]     = useState(DEFAULTS.street);
-  const [postalCode, setPostalCode] = useState(DEFAULTS.postalCode);
-  const [city,       setCity]       = useState(DEFAULTS.city);
-  const [stateVal,   setStateVal]   = useState(DEFAULTS.state);
-  const [country,    setCountry]    = useState(DEFAULTS.country);
-
-  // Profile image — URL or upload
+  // Hero image — single slot. URL or file upload.
   const [image, setImage] = useState<ImageSlotState>(emptySlot());
+
+  // Toggles
+  const [enableImageUpload, setEnableImageUpload]   = useState(DEFAULTS.enableImageUpload);
+  const [requireContactInfo, setRequireContactInfo] = useState(DEFAULTS.requireContactInfo);
 
   // Options
   const [returnImage, setReturnImage] = useState(DEFAULTS.returnImage);
@@ -111,63 +106,36 @@ export default function Home() {
     return null;
   }
 
-  /** Build the address object only if at least one field is filled — keeps the payload tidy. */
-  function buildAddress() {
-    const trimmed = {
-      street:     street.trim(),
-      postalCode: postalCode.trim(),
-      city:       city.trim(),
-      state:      stateVal.trim(),
-      country:    country.trim(),
-    };
-    const anySet = Object.values(trimmed).some(v => v.length > 0);
-    if (!anySet) return undefined;
-    return {
-      street:     trimmed.street     || undefined,
-      postalCode: trimmed.postalCode || undefined,
-      city:       trimmed.city       || undefined,
-      state:      trimmed.state      || undefined,
-      country:    trimmed.country    || undefined,
-    };
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setResponse(null);
-
     setProgress('Creating QR…');
 
-    // Phase 1 — create the QR. URL-mode image goes in the payload; file-
-    // mode leaves imageUrl undefined and is uploaded in Phase 2.
+    // Phase 1 — create the QR. If the image slot is in URL mode we pass the
+    // URL; if it's in file mode we leave serviceImageUrl undefined and
+    // upload separately in Phase 2.
     const payload = {
       name:                name.trim()                || undefined,
+      description:         description.trim()         || undefined,
       externalReferenceID: externalReferenceID.trim() || undefined,
-      vcard: {
-        fullName:     fullName.trim(),
-        phone:        phone.trim()        || undefined,
-        altPhone:     altPhone.trim()     || undefined,
-        email:        email.trim()        || undefined,
-        website:      website.trim()      || undefined,
-        companyName:  companyName.trim()  || undefined,
-        companyTitle: companyTitle.trim() || undefined,
-        summaryText:  summaryText.trim()  || undefined,
-        imageUrl:     image.mode === 'url' ? (image.url.trim() || undefined) : undefined,
-        address:      buildAddress(),
+      serviceFeedback: {
+        serviceTitle:        serviceTitle.trim(),
+        serviceDescription:  serviceDescription.trim() || undefined,
+        thankYouMessage:     thankYouMessage.trim()    || undefined,
+        brandColor:          brandColor.trim()         || undefined,
+        serviceImageUrl:     image.mode === 'url' ? (image.url.trim() || undefined) : undefined,
+        enableImageUpload,
+        requireContactInfo,
       },
       returnImage,
     };
 
-    const createUrl = '/api/qr/vcard';
-    setRequest({
-      method: 'POST',
-      url: createUrl,
-      body: payload,
-      sentAt: new Date().toISOString(),
-    });
+    const createUrl = '/api/qr/service-feedback';
+    setRequest({ method: 'POST', url: createUrl, body: payload, sentAt: new Date().toISOString() });
 
     const start = performance.now();
-    let createBody: VCardResult | null = null;
+    let createBody: ServiceFeedbackResult | null = null;
     try {
       const res = await fetch(createUrl, {
         method: 'POST',
@@ -186,9 +154,9 @@ export default function Home() {
       }
 
       // Phase 2 — upload the picked file, if any.
-      let uploadedImage: VCardResult['uploadedImage'] | undefined;
+      let uploadedImage: ServiceFeedbackResult['uploadedImage'] | undefined;
       if (image.mode === 'file' && image.file) {
-        setProgress('Uploading profile image…');
+        setProgress('Uploading hero image…');
         const form = new FormData();
         form.append('file', image.file);
         const upUrl = `/api/qr/${encodeURIComponent(createBody.qrCodeID!)}/upload-image`;
@@ -203,21 +171,19 @@ export default function Home() {
         }
       }
 
-      const merged: VCardResult = { ...createBody, uploadedImage };
+      const merged: ServiceFeedbackResult = {
+        ...createBody,
+        uploadedImage,
+      };
       setResponse({
-        status:     res.status,
-        statusText: res.statusText,
-        ok:         res.ok,
-        body:       merged,
-        durationMs: Math.round(performance.now() - start),
+        status: res.status, statusText: res.statusText, ok: res.ok,
+        body: merged, durationMs: Math.round(performance.now() - start),
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown network error';
       setResponse({
-        status:     0,
-        statusText: 'Network Error',
-        ok:         false,
-        body:       { status: 'error', code: 'NETWORK_ERROR', message } satisfies VCardResult,
+        status: 0, statusText: 'Network Error', ok: false,
+        body: { status: 'error', code: 'NETWORK_ERROR', message } satisfies ServiceFeedbackResult,
         durationMs: Math.round(performance.now() - start),
       });
     } finally {
@@ -228,21 +194,15 @@ export default function Home() {
 
   function reset() {
     setName(DEFAULTS.name);
+    setDescription(DEFAULTS.description);
     setExternalRef(DEFAULTS.externalReferenceID);
-    setFullName(DEFAULTS.fullName);
-    setPhone(DEFAULTS.phone);
-    setAltPhone(DEFAULTS.altPhone);
-    setEmail(DEFAULTS.email);
-    setWebsite(DEFAULTS.website);
-    setCompanyName(DEFAULTS.companyName);
-    setCompanyTitle(DEFAULTS.companyTitle);
-    setSummaryText(DEFAULTS.summaryText);
-    setStreet(DEFAULTS.street);
-    setPostalCode(DEFAULTS.postalCode);
-    setCity(DEFAULTS.city);
-    setStateVal(DEFAULTS.state);
-    setCountry(DEFAULTS.country);
+    setServiceTitle(DEFAULTS.serviceTitle);
+    setServiceDescription(DEFAULTS.serviceDescription);
+    setThankYouMessage(DEFAULTS.thankYouMessage);
+    setBrandColor(DEFAULTS.brandColor);
     setImage(emptySlot());
+    setEnableImageUpload(DEFAULTS.enableImageUpload);
+    setRequireContactInfo(DEFAULTS.requireContactInfo);
     setReturnImage(DEFAULTS.returnImage);
     setRequest(null);
     setResponse(null);
@@ -252,10 +212,10 @@ export default function Home() {
   return (
     <main className="max-w-7xl mx-auto p-6 lg:p-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Smart_QR Integration Demo</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Customer Support Hub — Single create</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Frontend calls <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">/api/qr/vcard</code>;
-          a Next.js server function forwards to Smart_QR with the API key kept on the server.
+          POST <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">/api/v1/public/qr/service-feedback</code> +
+          inline image upload — picked files are uploaded to the QR after it&apos;s created.
         </p>
       </header>
 
@@ -264,105 +224,74 @@ export default function Home() {
         <form onSubmit={submit}
               className="bg-white border border-gray-200 rounded-lg shadow-sm divide-y divide-gray-100">
 
-          <Section title="Request metadata"
-                   subtitle="Optional dashboard label + your own ID mapping">
+          <Section title="Request metadata" subtitle="Dashboard label, free-text notes, your own ID mapping">
             <Grid>
-              <Field label="Name" hint="Shown in your Smart_QR dashboard">
+              <Field label="Name">
                 <input value={name} onChange={e => setName(e.target.value)}
-                       className={inputClass} placeholder="John Doe – Sales" />
+                       className={inputClass} placeholder="Hotel — Front desk" maxLength={200} />
               </Field>
-              <Field label="External Reference ID" hint="">
+              <Field label="External Reference ID" hint="Used to correlate responses to your CRM record">
                 <input value={externalReferenceID} onChange={e => setExternalRef(e.target.value)}
-                       className={inputClass} placeholder="EMP-1234" maxLength={100} />
+                       className={inputClass} placeholder="HOTEL-FRONTDESK-A" maxLength={100} />
+              </Field>
+              <Field label="Description" full>
+                <input value={description} onChange={e => setDescription(e.target.value)}
+                       className={inputClass} placeholder="Short internal note" maxLength={500} />
               </Field>
             </Grid>
           </Section>
 
-          <Section title="Contact"
-                   subtitle="Full name required; at least one of phone or email">
+          <Section title="Feedback page" subtitle="Headline + copy customers see when they scan">
             <Grid>
-              <Field label="Full name *" full>
-                <input value={fullName} onChange={e => setFullName(e.target.value)}
-                       className={inputClass} required placeholder="John Doe" />
+              <Field label="Service title *" full>
+                <input value={serviceTitle} onChange={e => setServiceTitle(e.target.value)}
+                       className={inputClass} required maxLength={200}
+                       placeholder="How was your check-in?" />
               </Field>
-              <Field label="Phone">
-                <input value={phone} onChange={e => setPhone(e.target.value)}
-                       className={inputClass} placeholder="+95-9-123-456-789" />
+              <Field label="Service description" full>
+                <textarea value={serviceDescription} onChange={e => setServiceDescription(e.target.value)}
+                          className={inputClass + ' h-20'} maxLength={2000}
+                          placeholder="Help us improve…" />
               </Field>
-              <Field label="Alt phone">
-                <input value={altPhone} onChange={e => setAltPhone(e.target.value)}
-                       className={inputClass} placeholder="+95-1-555-1001" />
-              </Field>
-              <Field label="Email">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                       className={inputClass} placeholder="john@example.com" />
-              </Field>
-              <Field label="Website">
-                <input value={website} onChange={e => setWebsite(e.target.value)}
-                       className={inputClass} placeholder="https://example.com" />
+              <Field label="Thank-you message" full>
+                <input value={thankYouMessage} onChange={e => setThankYouMessage(e.target.value)}
+                       className={inputClass} maxLength={500}
+                       placeholder="Thank you! A manager will read every response." />
               </Field>
             </Grid>
           </Section>
 
-          <Section title="Company" subtitle="All optional">
-            <Grid>
-              <Field label="Company name">
-                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                       className={inputClass} placeholder="Example Co." />
+          <Section title="Branding & imagery"
+                   subtitle="The hero image accepts either a public URL or a file you upload directly.">
+            <div className="mb-4">
+              <Field label="Brand color">
+                <div className="flex gap-2">
+                  <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)}
+                         className="w-10 h-10 border border-gray-300 rounded" />
+                  <input value={brandColor} onChange={e => setBrandColor(e.target.value)}
+                         className={inputClass} placeholder="#1d62c4" />
+                </div>
               </Field>
-              <Field label="Title">
-                <input value={companyTitle} onChange={e => setCompanyTitle(e.target.value)}
-                       className={inputClass} placeholder="Senior Sales Lead" />
-              </Field>
-              <Field label="Summary text" full>
-                <input value={summaryText} onChange={e => setSummaryText(e.target.value)}
-                       className={inputClass} placeholder="Reach me anytime." />
-              </Field>
-            </Grid>
+            </div>
+
+            <ImageSlotRow label="Hero image" state={image}
+                          onModeChange={mode => setImage({ ...image, mode, url: mode === 'url' ? image.url : '', file: null, previewUrl: null })}
+                          onUrlChange={url => setImage({ ...image, url })}
+                          onFile={pickFile} />
           </Section>
 
-          <Section title="Address" subtitle="All optional — empty fields are omitted">
-            <Grid>
-              <Field label="Street" full>
-                <input value={street} onChange={e => setStreet(e.target.value)}
-                       className={inputClass} placeholder="123 Main Rd" />
-              </Field>
-              <Field label="Postal code">
-                <input value={postalCode} onChange={e => setPostalCode(e.target.value)}
-                       className={inputClass} placeholder="11181" />
-              </Field>
-              <Field label="City">
-                <input value={city} onChange={e => setCity(e.target.value)}
-                       className={inputClass} placeholder="Yangon" />
-              </Field>
-              <Field label="State / Region">
-                <input value={stateVal} onChange={e => setStateVal(e.target.value)}
-                       className={inputClass} placeholder="Yangon Region" />
-              </Field>
-              <Field label="Country">
-                <input value={country} onChange={e => setCountry(e.target.value)}
-                       className={inputClass} placeholder="Myanmar" />
-              </Field>
-            </Grid>
-          </Section>
-
-          <Section title="Profile image"
-                   subtitle="Either paste a public URL or upload directly. Uploads happen after the QR is created.">
-            <ImageSlotRow
-              label="Profile image"
-              state={image}
-              onModeChange={mode => setImage({ ...image, mode, url: mode === 'url' ? image.url : '', file: null, previewUrl: null })}
-              onUrlChange={url => setImage({ ...image, url })}
-              onFile={pickFile} />
+          <Section title="Form behaviour">
+            <div className="space-y-3">
+              <Toggle checked={enableImageUpload} onChange={setEnableImageUpload}
+                      label="Customer can attach a photo to their feedback" />
+              <Toggle checked={requireContactInfo} onChange={setRequireContactInfo}
+                      label="Ask for name + email before submission" />
+            </div>
           </Section>
 
           <Section title="Options">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={returnImage}
-                     onChange={e => setReturnImage(e.target.checked)}
-                     className="accent-blue-600 w-4 h-4" />
-              Include base64 QR image in response (<code>returnImage: true</code>)
-            </label>
+            <Toggle checked={returnImage} onChange={setReturnImage}
+                    label="Include base64 QR image in response (returnImage: true)" />
           </Section>
 
           <div className="p-5 flex items-center justify-end gap-2 bg-gray-50">
@@ -377,11 +306,11 @@ export default function Home() {
                                bg-white hover:bg-gray-50 disabled:opacity-50 text-sm font-medium">
               Reset
             </button>
-            <button type="submit" disabled={loading || !fullName.trim()}
+            <button type="submit" disabled={loading || !serviceTitle.trim()}
                     className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-700
                                disabled:opacity-50 disabled:cursor-not-allowed
                                text-white text-sm font-medium">
-              {loading ? 'Working…' : 'Create VCard'}
+              {loading ? 'Working…' : 'Create Feedback QR'}
             </button>
           </div>
         </form>
@@ -435,11 +364,20 @@ function Field({ label, hint, full, children }:
   );
 }
 
-/**
- * Image-input row with URL ⇄ Upload mode toggle. URL mode pastes a
- * pre-hosted public URL; Upload mode picks a file that's uploaded to
- * POST /qr/{id}/upload-image after the QR is created.
- */
+function Toggle({ checked, onChange, label }:
+  { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+             className="accent-blue-600 w-4 h-4" />
+      {label}
+    </label>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+// Per-slot image input — segmented toggle between URL and File
+// ────────────────────────────────────────────────────────
 function ImageSlotRow({
   label, state, onModeChange, onUrlChange, onFile,
 }: {
@@ -489,7 +427,7 @@ function ImageSlotRow({
       {state.mode === 'url' ? (
         <input value={state.url} onChange={e => onUrlChange(e.target.value)}
                className={inputClass} type="url"
-               placeholder="https://cdn.example.com/profile.jpg" />
+               placeholder="https://cdn.example.com/image.jpg" />
       ) : (
         <div className="space-y-2">
           <input type="file" accept="image/jpeg,image/png,image/webp"
@@ -498,7 +436,9 @@ function ImageSlotRow({
                             file:mr-3 file:px-3 file:py-1.5 file:rounded
                             file:border-0 file:bg-blue-50 file:text-blue-700
                             file:font-medium hover:file:bg-blue-100" />
-          {pickError && <p className="text-[11px] text-red-700">{pickError}</p>}
+          {pickError && (
+            <p className="text-[11px] text-red-700">{pickError}</p>
+          )}
           {state.previewUrl && state.file && (
             <div className="flex items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -517,10 +457,12 @@ function ImageSlotRow({
   );
 }
 
-/** Compact, human-readable highlights from a typical Smart_QR response. */
+// ────────────────────────────────────────────────────────
+// Response highlights — includes upload outcomes
+// ────────────────────────────────────────────────────────
 function renderHighlights(body: unknown): ReactNode {
   if (!body || typeof body !== 'object') return null;
-  const r = body as VCardResult;
+  const r = body as ServiceFeedbackResult;
 
   const rows: Array<[string, ReactNode]> = [];
   if (r.qrCodeID)               rows.push(['QR Code ID',  <code key="qid" className="bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">{r.qrCodeID}</code>]);
@@ -533,7 +475,6 @@ function renderHighlights(body: unknown): ReactNode {
   if (r.field)                  rows.push(['Field',       <code key="fd" className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded text-[11px]">{r.field}</code>]);
 
   const qrSrc = r.qrImageBase64 || r.qrImageUrl;
-
   if (rows.length === 0 && !qrSrc && !r.uploadedImage) return null;
 
   return (
@@ -550,7 +491,7 @@ function renderHighlights(body: unknown): ReactNode {
       {r.uploadedImage && (
         <div className="pt-2 border-t border-gray-100 mt-2">
           <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
-            Uploaded profile image
+            Uploaded hero image
           </div>
           {r.uploadedImage.imageUrl ? (
             <a href={r.uploadedImage.imageUrl} target="_blank" rel="noreferrer"

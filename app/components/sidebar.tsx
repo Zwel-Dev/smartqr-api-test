@@ -5,10 +5,10 @@ import Image, { type StaticImageData } from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-import vcardIcon   from '@/app/assets/vcard-qr.svg';
-import websiteIcon from '@/app/assets/website-qr.svg';
-import eventIcon   from '@/app/assets/Event-icon.png';
-
+import vcardIcon    from '@/app/assets/vcard-qr.svg';
+import websiteIcon  from '@/app/assets/website-qr.svg';
+import eventIcon    from '@/app/assets/Event-icon.png';
+import feedbackIcon from '@/app/assets/feedback-qr.svg';   
 interface NavItem {
   href: string;
   label: string;
@@ -43,6 +43,15 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: '/event',      label: 'Single Event' },
       { href: '/event-bulk', label: 'Bulk Event'   },
+    ],
+  },
+  {
+    label: 'Customer Support Hub',
+    icon: feedbackIcon,
+    items: [
+      { href: '/service-feedback',            label: 'Single' },
+      { href: '/service-feedback-bulk',       label: 'Bulk' },
+      { href: '/service-feedback-responses',  label: 'Responses browser' },
     ],
   },
 ];
